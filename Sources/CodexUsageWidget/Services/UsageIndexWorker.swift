@@ -171,13 +171,15 @@ final class UsageIndexWorker {
                         } catch {
                             let code = error as? UsageIndexError ?? .databaseFailure
                             try? store.observeSource(source: source, identity: checkpoint?.identity ?? "",
-                                targetEnd: checkpoint?.targetEnd ?? 0, status: "unreadable", now: Date())
+                                targetEnd: checkpoint?.targetEnd ?? 0, status: code == .sourceMissing ? "missing" : "unreadable", now: Date())
                             self.failures[source, default: 0] += 1
-                            if self.failures[source, default: 0] >= 3 && code != .sourceChanged && code != .cancelled {
-                                try? store.execute("UPDATE job SET status='error',cursor=? WHERE id=?", [.text("{\"error\":\""+code.rawValue+"\"}"),.text(job.id)])
+                            if self.failures[source, default: 0] >= 3 {
+                                // 缺失、持续变化和超时也必须退避，不能永久占用两个解析槽位
+                                try? store.execute("UPDATE job SET status='error',cursor=?,retry_at_ms=? WHERE id=?", [.text("{\"error\":\""+code.rawValue+"\"}"),
+                                    .integer(try usageIndexMilliseconds(Date().addingTimeInterval(300))), .text(job.id)])
                                 try? store.execute("UPDATE source SET status='stale' WHERE id=?", [.text(source)])
                             } else {
-                                try? store.finishJob(job, more: true, retryAt: Date().addingTimeInterval(1), now: Date())
+                                try? store.finishJob(job, more: true, retryAt: Date().addingTimeInterval(1), error: code, now: Date())
                                 self.writer.asyncAfter(deadline: .now() + 1) { self.dispatch() }
                             }
                             self.publish(code)

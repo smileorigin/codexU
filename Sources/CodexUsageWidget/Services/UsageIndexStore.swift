@@ -4,7 +4,7 @@ import SQLite3
 
 enum UsageIndexError: String, Error {
     case indexBusy, unsupportedSchema, cacheInvalid, diskFull, resourceLimited
-    case sourceChanged, revisionExpired, cancelled, databaseFailure
+    case sourceMissing, sourceChanged, revisionExpired, cancelled, databaseFailure
 }
 
 enum UsageSQLValue: Equatable {

@@ -7,6 +7,7 @@ APP_DIR := $(BUILD_DIR)/$(APP_NAME).app
 MACOS_DIR := $(APP_DIR)/Contents/MacOS
 RESOURCES_DIR := $(APP_DIR)/Contents/Resources
 SOURCES := $(shell find Sources/CodexUsageWidget -name '*.swift' | sort)
+.DEFAULT_GOAL := build
 APP_ICON := Resources/codexU.icns
 LEADERSHIP_BADGES := $(sort $(wildcard Resources/LeadershipBadges/leadership-badge-l*.png))
 DEPLOYMENT_TARGET ?= 13.0
@@ -37,7 +38,15 @@ POWERSHELL ?= powershell.exe
 
 .PHONY: build run probe test-rate-limits test-statistics-time-zone test-token-counter test-model-pricing test-model-usage-trend test-model-inference-performance test-app-server-pipe test-task-runtime test-leadership-model test-leadership-assets test-claude-skill-paths test-codex-session-link test-performance-monitor test-phase-one-gate test-particle-animation test-palettes test-macos-compatibility memory-risk-check phase-one-check phase-one-soak install dmg dmg-arm64 dmg-intel checksum checksum-arm64 checksum-intel release release-arm64 release-intel release-all release-package release-windows release-cross-platform-check release-check notarize verify clean clean-dist
 
-build: test-leadership-assets
+$(BUILD_DIR)/zstd-$(ARCH_NAME).o: Vendor/zstd/zstddeclib.c
+	mkdir -p "$(BUILD_DIR)"
+	clang -O2 $(SWIFTC_TARGET_FLAGS) -c $< -o $@
+
+$(BUILD_DIR)/usage-decoder-$(ARCH_NAME).o: Sources/CodexUsageDecoder/decoder.c Sources/CodexUsageDecoder/decoder.h Vendor/zstd/zstd.h Vendor/zstd/zstd_errors.h
+	mkdir -p "$(BUILD_DIR)"
+	clang -O2 $(SWIFTC_TARGET_FLAGS) -c $< -o $@
+
+build: test-leadership-assets $(BUILD_DIR)/zstd-$(ARCH_NAME).o $(BUILD_DIR)/usage-decoder-$(ARCH_NAME).o
 	rm -rf "$(APP_DIR)"
 	mkdir -p "$(MACOS_DIR)" "$(RESOURCES_DIR)"
 	cp Resources/Info.plist "$(APP_DIR)/Contents/Info.plist"
@@ -46,8 +55,10 @@ build: test-leadership-assets
 	cp Resources/model-pricing*.json "$(RESOURCES_DIR)/"
 	cp -R Resources/LeadershipBadges "$(RESOURCES_DIR)/LeadershipBadges"
 	cp -R Resources/Palettes "$(RESOURCES_DIR)/Palettes"
+	cp Vendor/zstd/LICENSE "$(RESOURCES_DIR)/Zstandard-LICENSE.txt"
 	/usr/bin/xattr -dr com.apple.quarantine "$(APP_DIR)" 2>/dev/null || true
 	MACOSX_DEPLOYMENT_TARGET="$(DEPLOYMENT_TARGET)" swiftc -O -parse-as-library $(SWIFTC_TARGET_FLAGS) $(SWIFTC_FEATURE_FLAGS) $(SOURCES) \
+		-import-objc-header Sources/CodexUsageDecoder/decoder.h $(BUILD_DIR)/zstd-$(ARCH_NAME).o $(BUILD_DIR)/usage-decoder-$(ARCH_NAME).o \
 		-o "$(MACOS_DIR)/$(APP_NAME)" \
 		-framework Cocoa \
 		-framework Carbon \

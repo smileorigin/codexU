@@ -65,7 +65,20 @@ enum UsageIndexWorkerSelfTest {
             try handle.seekToEnd(); try handle.write(contentsOf: bytes.dropFirst(first.count)); try handle.close()
             guard try index() > 0, try total() == 175 else { throw UsageIndexError.databaseFailure }
             guard try index() == 0, try total() == 175 else { throw UsageIndexError.databaseFailure }
-            // Stop with a >16 MiB line still lacking its newline, then resume after it arrives.
+            // 同一逻辑会话切换压缩格式后替换旧世代，重开不重复累计
+            let compressedPath = path.appendingPathExtension("zst")
+            try Data(contentsOf: fixture.appendingPathExtension("zst")).write(to: compressedPath)
+            try FileManager.default.removeItem(at: path)
+            guard try index() > 0, try total() == 175,
+                  try index() == 0, try total() == 175 else { throw UsageIndexError.databaseFailure }
+            // 压缩文件被原子替换时不能沿用旧的解压偏移
+            try Data(contentsOf: fixture.deletingLastPathComponent().appendingPathComponent("codex-first-counter.jsonl.zst"))
+                .write(to: compressedPath, options: .atomic)
+            guard try index() > 0, try total() == 100 else { throw UsageIndexError.databaseFailure }
+            // 明文重新出现时优先读取明文，压缩副本不会成为第二个来源
+            try bytes.write(to: path)
+            guard try index() > 0, try total() == 175 else { throw UsageIndexError.databaseFailure }
+            // 超长行缺少换行时停止，补齐后从原检查点继续
             let body:[String:Any] = ["type":"response_item","timestamp":"2026-09-19T10:00:00Z",
                 "payload":["type":"function_call_output","output":String(repeating:"x",count:17*1024*1024)]]
             var pending=bytes;pending.append(try JSONSerialization.data(withJSONObject:body,options:.sortedKeys))
@@ -91,7 +104,7 @@ enum UsageIndexWorkerSelfTest {
             if let halfFailure { throw halfFailure }
             let tail=try FileHandle(forWritingTo:path);try tail.seekToEnd();try tail.write(contentsOf:Data([10]));try tail.close()
             guard try index()<256*1024,try total()==175 else { throw UsageIndexError.databaseFailure }
-            print("history worker: cold ingestion, zero-body restart, atomic replacement and append parity passed")
+            print("history worker: cold ingestion, compressed transition/restart/replacement, plaintext preference and append parity passed")
             return true
         } catch {
             print("history worker failed: \(error)")

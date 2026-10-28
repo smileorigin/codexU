@@ -12,9 +12,9 @@ struct UsageFileStamp: Codable, Equatable {
     let headDigest: String
     let boundaryDigest: String
 
-    static func capture(url: URL, committedOffset: UInt64) throws -> UsageFileStamp {
-        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
-        guard descriptor >= 0 else { throw UsageIndexError.sourceChanged }
+    static func capture(url: URL, committedOffset: UInt64, descriptor supplied: Int32? = nil) throws -> UsageFileStamp {
+        let descriptor = supplied.map { dup($0) } ?? open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard descriptor >= 0 else { throw errno == ENOENT ? UsageIndexError.sourceMissing : UsageIndexError.sourceChanged }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         defer { try? handle.close() }
         var before = stat()
@@ -48,8 +48,8 @@ struct UsageFileStamp: Codable, Equatable {
 
     /// A frozen target that split a line can extend only to its first subsequent newline.
     /// nil means wait for source growth, not EOF and not a complete generation.
-    static func completingBoundary(url: URL, frozenEnd: UInt64) throws -> UInt64? {
-        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+    static func completingBoundary(url: URL, frozenEnd: UInt64, descriptor supplied: Int32? = nil) throws -> UInt64? {
+        let descriptor = supplied.map { dup($0) } ?? open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard descriptor >= 0 else { throw UsageIndexError.sourceChanged }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         defer { try? handle.close() }

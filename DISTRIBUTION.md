@@ -13,6 +13,8 @@ This app is distributed outside the Mac App Store as a downloadable DMG. The rep
 
 ## Local unsigned DMG
 
+macOS 构建从 `Vendor/zstd` 静态编译压缩会话解码器，无需额外安装解压工具或动态库；应用资源必须保留 `Zstandard-LICENSE.txt`。上游版本、许可证及源码校验值见 [`Vendor/zstd/README.md`](Vendor/zstd/README.md)。
+
 Use this for private testing or installation on your own machines:
 
 ```sh

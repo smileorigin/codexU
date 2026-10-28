@@ -134,6 +134,7 @@ final class UsageParseHelper {
     static func runChild() -> Int32 {
         guard setpgid(0, 0) == 0 || getpgrp() == getpid() else { return 2 }
         var pending = Data()
+        var cachedSource: UsageParseSource?
         do {
             var incoming = [UInt8](repeating: 0, count: 32 * 1024)
             while true {
@@ -150,13 +151,16 @@ final class UsageParseHelper {
                     pending.removeSubrange(pending.startIndex...newline)
                     do {
                         guard request.path.utf8.count <= 16384, request.id.utf8.count <= 128 else { throw UsageIndexError.resourceLimited }
-                        let url = URL(fileURLWithPath: request.path)
-                        let metadata = try UsageFileStamp.capture(url: url, committedOffset: 0)
+                        if cachedSource?.matches(path: request.path, runtime: request.runtime) != true { cachedSource = nil }
+                        let source = try UsageParseSource(path: request.path, runtime: request.runtime, cached: cachedSource)
+                        cachedSource = source
+                        let url = source.url
+                        let metadata = try source.stamp(at: 0)
                         var before = metadata
                         var rebuild = request.forceRebuild || request.targetEnd > metadata.size
                             || (request.previousStamp.map { $0.size > metadata.size } ?? false)
                         if !rebuild {
-                            before = try UsageFileStamp.capture(url: url, committedOffset: request.checkpoint.cursor.offset)
+                            before = try source.stamp(at: request.checkpoint.cursor.offset)
                             if let previous = request.previousStamp {
                                 rebuild = !previous.validatesPrefix(of: before)
                                     || (previous.size == before.size && (previous.modifiedSeconds != before.modifiedSeconds
@@ -172,21 +176,21 @@ final class UsageParseHelper {
                             if request.checkpoint.cursor.largeProjection != nil,metadata.size>request.targetEnd {
                                 // A streamed oversized tail can advance in bounded pieces even when
                                 // its closing newline has not yet arrived.
-                                do { boundary = try UsageFileStamp.completingBoundary(url:url,frozenEnd:request.targetEnd) }
+                                do { boundary = try UsageFileStamp.completingBoundary(url:url,frozenEnd:request.targetEnd,descriptor:source.descriptor) }
                                 catch UsageIndexError.resourceLimited { boundary = nil }
                                 if boundary == nil { boundary = min(metadata.size,request.targetEnd+UInt64(UsageStreamParser.batchBytes)) }
                             } else {
-                                boundary = try UsageFileStamp.completingBoundary(url: url, frozenEnd: request.targetEnd)
+                                boundary = try UsageFileStamp.completingBoundary(url: url, frozenEnd: request.targetEnd, descriptor: source.descriptor)
                             }
                         }
                         let parser = rebuild ? CodexIndexCheckpoint() : request.checkpoint
                         let target = rebuild ? 0 : request.targetEnd
                         guard target <= metadata.size else { throw UsageIndexError.sourceChanged }
-                        let frozenStamp = try UsageFileStamp.capture(url: url, committedOffset: target)
+                        let frozenStamp = try source.stamp(at: target)
                         let batch: CodexIndexBatch
                         var claude: ClaudeIndexBatch?
                         if request.runtime == "codex" {
-                            batch = try UsageStreamParser.readCodex(url: url, targetEnd: target, checkpoint: parser, maximumLines: 200)
+                            batch = try UsageStreamParser.readCodex(url: url, targetEnd: target, checkpoint: parser, maximumLines: 200, descriptor: source.descriptor)
                         } else if request.runtime == "claude-code" {
                             let state = rebuild ? ClaudeIndexCheckpoint() : (request.claudeCheckpoint ?? ClaudeIndexCheckpoint())
                             let parsed = try ClaudeIncrementalAdapter.read(url: url, targetEnd: target, checkpoint: state,
@@ -196,8 +200,8 @@ final class UsageParseHelper {
                             batch = CodexIndexBatch(checkpoint: common, deltas: [], inferenceSamples: [], toolCalls: [:], skillLoads: [],
                                 readBytes: parsed.readBytes, reachedTarget: parsed.reachedTarget, awaitingNewline: parsed.awaitingNewline)
                         } else { throw UsageIndexError.cacheInvalid }
-                        let stamp = try UsageFileStamp.capture(url: url, committedOffset: batch.checkpoint.cursor.offset)
-                        let verifiedTarget = try UsageFileStamp.capture(url: url, committedOffset: target)
+                        let stamp = try source.stamp(at: batch.checkpoint.cursor.offset)
+                        let verifiedTarget = try source.stamp(at: target)
                         guard frozenStamp.validatesPrefix(of: verifiedTarget), metadata.identity == stamp.identity,
                               stamp.size >= metadata.size,
                               stamp.size > metadata.size || (metadata.modifiedSeconds == stamp.modifiedSeconds

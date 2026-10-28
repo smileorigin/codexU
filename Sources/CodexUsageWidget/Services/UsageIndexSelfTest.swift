@@ -29,7 +29,7 @@ enum UsageIndexSelfTest {
                 return false
             }
             print("history oracle: fixed counter fixture passed")
-            return storeTests() && UsageStreamParserSelfTest.run() && UsageIndexTransactionSelfTest.run() && UsageSourceDiscoverySelfTest.run() && UsageIndexWorkerSelfTest.run() && UsageArchiveSelfTest.run() && UsageClaudeIndexSelfTest.run() && UsageClaudeOwnershipSelfTest.run() && UsagePipelineSelfTest.run() && UsageIndexedReportsSelfTest.run() && UsageHistoryServiceSelfTest.run() && UsageLargeJSONSelfTest.run()
+            return storeTests() && UsageParseSourceSelfTest.run() && UsageStreamParserSelfTest.run() && UsageIndexTransactionSelfTest.run() && UsageSourceDiscoverySelfTest.run() && UsageIndexWorkerSelfTest.run() && UsageArchiveSelfTest.run() && UsageClaudeIndexSelfTest.run() && UsageClaudeOwnershipSelfTest.run() && UsagePipelineSelfTest.run() && UsageIndexedReportsSelfTest.run() && UsageHistoryServiceSelfTest.run() && UsageLargeJSONSelfTest.run()
         } catch {
             print("history oracle: fixture unavailable (run from repository root)")
             return false

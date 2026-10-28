@@ -103,7 +103,7 @@ jobs:
           PY
           source_sha="$(python3 -c 'import json; print(json.load(open("dist/manifest-macos.json", encoding="utf-8"))["source_sha"])')"
           [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
-          git diff --exit-code "$source_sha" HEAD -- Sources Resources Makefile scripts .github/workflows/release-packages.yml
+          git diff --exit-code "$source_sha" HEAD -- Sources Resources Vendor Makefile scripts .github/workflows/release-packages.yml
           make release-check VERSION="$VERSION"
       - name: Upload macOS artifacts
         if: inputs.candidate_run == ''

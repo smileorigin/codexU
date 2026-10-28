@@ -26,9 +26,14 @@ extension UsageIndexStore {
     /// Inventory refreshes are level-triggered. Re-aging already queued work on every
     /// scan can starve the same older sources forever while a large backfill is running.
     func enqueueDiscoveredSource(_ source: String, priority: Int, now: Date) throws {
-        let state = try rows("SELECT status FROM job WHERE dedup_key=?", [.text("parse:"+source)], limit:1).first?.first?.text
+        let job = try rows("SELECT status,retry_at_ms,json_extract(cursor,'$.error') FROM job WHERE dedup_key=?", [.text("parse:"+source)], limit:1).first
+        let state = job?.first?.text
         if state == "queued" || state == "running" {
-            try execute("UPDATE job SET priority=min(priority,?),retry_at_ms=NULL WHERE dedup_key=?",[.integer(Int64(priority)),.text("parse:"+source)])
+            // 失败退避不能被周期扫描取消；正常等待换行的任务仍可及时检查新增字节
+            try execute("UPDATE job SET priority=min(priority,?),retry_at_ms=CASE WHEN json_extract(cursor,'$.error') IS NULL THEN NULL ELSE retry_at_ms END WHERE dedup_key=?",
+                [.integer(Int64(priority)),.text("parse:"+source)])
+        } else if state == "error", let retry = job?[1].integer, retry > (try usageIndexMilliseconds(now)) {
+            return
         } else {
             try enqueueSource(source, priority:priority, now:now)
         }
@@ -62,12 +67,13 @@ extension UsageIndexStore {
     }
 
     /// A source notification arriving during work must survive completion of the older claim.
-    func finishJob(_ job: UsageIndexJob, more: Bool, retryAt: Date? = nil, now: Date) throws {
+    func finishJob(_ job: UsageIndexJob, more: Bool, retryAt: Date? = nil, error: UsageIndexError? = nil, now: Date) throws {
         let retry = try retryAt.map { UsageSQLValue.integer(try usageIndexMilliseconds($0)) } ?? .null
         try execute("""
             UPDATE job SET status=CASE WHEN updated_at_ms<>? OR ?=1 THEN 'queued' ELSE 'done' END,
-              retry_at_ms=?,updated_at_ms=max(updated_at_ms,?) WHERE id=? AND status='running'
+              retry_at_ms=?,cursor=?,updated_at_ms=max(updated_at_ms,?) WHERE id=? AND status='running'
             """, [.integer(job.claimVersion), .integer(more ? 1 : 0), retry,
+                  .text(error.map { "{\"error\":\"" + $0.rawValue + "\"}" } ?? "{}"),
                   .integer(try usageIndexMilliseconds(now)), .text(job.id)])
         guard try scalar("SELECT changes()") == 1 else { throw UsageIndexError.sourceChanged }
     }

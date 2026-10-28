@@ -26,11 +26,12 @@ enum UsageStreamParser {
     static let batchBytes = 1024 * 1024
 
     static func read(url: URL, targetEnd: UInt64, cursor: UsageStreamCursor,
-                     maximumLines: Int = 1000, projectLargeJSON: Bool = false, consume: (Data, UInt64) throws -> Void) throws -> UsageStreamBatch {
+                     maximumLines: Int = 1000, projectLargeJSON: Bool = false, descriptor supplied: Int32? = nil,
+                     consume: (Data, UInt64) throws -> Void) throws -> UsageStreamBatch {
         guard maximumLines > 0, maximumLines <= 1000, cursor.offset <= targetEnd else {
             throw UsageIndexError.sourceChanged
         }
-        let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        let fd = supplied.map { dup($0) } ?? open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { throw UsageIndexError.sourceChanged }
         let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         defer { try? handle.close() }
@@ -135,7 +136,7 @@ struct CodexIndexBatch: Codable {
 
 extension UsageStreamParser {
     static func readCodex(url: URL, targetEnd: UInt64, checkpoint: CodexIndexCheckpoint,
-                          maximumLines: Int = 1000) throws -> CodexIndexBatch {
+                          maximumLines: Int = 1000, descriptor: Int32? = nil) throws -> CodexIndexBatch {
         var next = checkpoint
         var deltas: [SessionUsageDelta] = []
         var inferenceSamples: [ModelInferenceSample] = []
@@ -152,7 +153,7 @@ extension UsageStreamParser {
         let outputs = ["reasoning", "agent_reasoning", "agent_message", "function_call", "custom_tool_call",
                        "tool_search_call", "web_search_call"].map(needle) + [Data(#""role":"assistant""#.utf8)]
         let batch = try read(url: url, targetEnd: targetEnd, cursor: checkpoint.cursor,
-                             maximumLines: maximumLines, projectLargeJSON: true) { line, _ in
+                             maximumLines: maximumLines, projectLargeJSON: true, descriptor: descriptor) { line, _ in
             if let turn = UsageLeadershipAdapter.event(line) { turns.append(turn) }
             reader.processSessionLine(line,
                 sessionMetaNeedle: needle("session_meta"), turnContextNeedle: needle("turn_context"),
