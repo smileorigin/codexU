@@ -65,6 +65,8 @@ A [Windows adaptation](docs/WINDOWS.en.md), built with Tauri + Rust, provides a 
 - Menu bar runtime menu: shows quick Codex / Claude Code status and provides Open, Settings, and Quit actions.
 - Settings window: configure language, appearance, menu bar mode/quota direction/visible metrics, always-on-top and close-window behavior, and control automatic checks or manually check GitHub Releases from the System section.
 - Main-window refresh button: immediately refresh quota, token usage, trend, and task board.
+- macOS Settings → Data & Statistics: choose 30 seconds, 1 minute, 5 minutes, or 15 minutes. Auto keeps the existing 5-minute visible / 15-minute hidden interval. The visible task board polls at most every 60 seconds; history is scanned incrementally every 30 seconds.
+- Refresh after Codex tasks is enabled by default. A local task-completion notification requests a refresh after about one second, including while the window is hidden. Notifications are coalesced, and an in-flight read retains one follow-up read. This requires the local shared Codex connection; periodic updates remain the fallback when notifications are unavailable. Manual refresh also advances the next history scan.
 - System window controls: close, minimize, or zoom the main window. After closing, reopen from the menu bar item or shortcut; quit from the menu bar runtime menu or the app menu.
 
 ## First Install: Privacy & Security

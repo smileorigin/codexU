@@ -11,7 +11,24 @@ final class UsageHistoryService {
     private var epoch: UInt64 = 0
     private var update: ((UsageArchivePresentation) -> Void)?
     private var failure: ((UsageIndexError) -> Void)?
-    private var refreshScheduled = false
+    private var runningContext: RuntimeLoadContext?
+    private lazy var discoveryRefresh: CoalescingRefreshScheduler = CoalescingRefreshScheduler(queue: queue) { [weak self] finished in
+        guard let self, let context = self.runningContext, self.worker != nil, !self.stopping else {
+            finished()
+            return
+        }
+        let epoch = self.epoch
+        let root = SHA256.hash(data: Data(context.homeDirectory.standardizedFileURL.path.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        self.discoveryQueue.async {
+            self.discover(context: context, directory: Self.indexDirectory(context: context), root: root, epoch: epoch)
+            finished()
+            self.queue.async {
+                guard self.epoch == epoch, self.runningContext != nil else { return }
+                self.discoveryRefresh.request(after: 30)
+            }
+        }
+    }
     private var lastProbeProgress: TimeInterval = 0
     private var stopping = false
     private var stopCompletions: [() -> Void] = []
@@ -24,8 +41,13 @@ final class UsageHistoryService {
             self.failure = onFailure
             let key = context.homeDirectory.standardizedFileURL.path + "\n" + context.cacheDirectory.path + "\n"
                 + context.statistics.resolvedIdentifier + "\n" + context.statistics.dayKey(for: context.now)
-            if self.key == key { return }
-            self.key = key; self.epoch &+= 1; self.refreshScheduled = false
+            if self.key == key {
+                self.discoveryRefresh.request()
+                return
+            }
+            self.key = key; self.epoch &+= 1
+            self.discoveryRefresh.cancel()
+            self.runningContext = nil
             self.pendingContext = context
             self.transition()
         }
@@ -54,7 +76,8 @@ final class UsageHistoryService {
         queue.async {
             if let completion { self.stopCompletions.append(completion) }
             self.epoch &+= 1; self.key = nil; self.update = nil; self.failure = nil
-            self.pendingContext = nil; self.refreshScheduled = false
+            self.pendingContext = nil; self.runningContext = nil
+            self.discoveryRefresh.cancel()
             self.transition()
         }
     }
@@ -161,7 +184,8 @@ final class UsageHistoryService {
                     self.transition()
                     return
                 }
-                self.discoveryQueue.async { self.discover(context: context, directory: directory, root: root, epoch: epoch) }
+                self.runningContext = context
+                self.discoveryRefresh.request()
             }
         })
     }
@@ -226,7 +250,6 @@ final class UsageHistoryService {
             worker.notifyInventoryChanged()
         } catch { reportFailure(error, epoch: epoch) }
         }
-        scheduleDiscovery(context: context, directory: directory, root: root, epoch: epoch)
     }
 
     private func awaitWorker(_ worker: UsageIndexWorker, operation: @escaping (UsageIndexStore) throws -> Void) throws {
@@ -237,15 +260,4 @@ final class UsageHistoryService {
         if let failure { throw failure }
     }
 
-    private func scheduleDiscovery(context: RuntimeLoadContext, directory: URL, root: String, epoch: UInt64) {
-        queue.async {
-            guard self.epoch == epoch, !self.refreshScheduled else { return }
-            self.refreshScheduled = true
-            self.queue.asyncAfter(deadline: .now() + 30) {
-                guard self.epoch == epoch else { return }
-                self.refreshScheduled = false
-                self.discoveryQueue.async { self.discover(context: context, directory: directory, root: root, epoch: epoch) }
-            }
-        }
-    }
 }

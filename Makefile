@@ -67,7 +67,10 @@ run: build
 probe: build
 	"$(MACOS_DIR)/$(APP_NAME)" --dump-json
 
-.PHONY: test-home-startup
+.PHONY: test-home-startup test-refresh-scheduling
+test-refresh-scheduling: build
+	"$(MACOS_DIR)/$(APP_NAME)" --self-test-refresh-scheduling
+
 test-home-startup: build
 	"$(MACOS_DIR)/$(APP_NAME)" --self-test-home-startup
 	"$(MACOS_DIR)/$(APP_NAME)" --self-test-home-snapshot

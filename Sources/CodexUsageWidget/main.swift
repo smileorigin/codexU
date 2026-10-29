@@ -714,9 +714,12 @@ final class UsageStore: ObservableObject {
     private var isTaskBoardSelected = false
     private var lastFullRefreshCompletedAt: Date?
     private var baseTaskBoards: [RuntimeScope: TaskBoard] = [:]
-    private let taskBoardRefreshInterval: TimeInterval = 60
-    private let foregroundFullRefreshInterval: TimeInterval = 5 * 60
-    private let backgroundFullRefreshInterval: TimeInterval = 15 * 60
+    private(set) var refreshInterval: UsageRefreshInterval = .automatic
+    private var refreshAfterCodexTask = true
+    private var taskCompletionRefresh: CoalescingRefreshScheduler!
+    private var taskBoardRefreshInterval: TimeInterval { min(60, refreshInterval.seconds(foreground: true)) }
+    private var foregroundFullRefreshInterval: TimeInterval { refreshInterval.seconds(foreground: true) }
+    private var backgroundFullRefreshInterval: TimeInterval { refreshInterval.seconds(foreground: false) }
     private let codexTaskClient: CodexTaskEventClient
     private let homeCoordinator: UsageRefreshCoordinator
 
@@ -724,6 +727,12 @@ final class UsageStore: ObservableObject {
          homeCoordinator: UsageRefreshCoordinator = UsageRefreshCoordinator()) {
         self.codexTaskClient = codexTaskClient
         self.homeCoordinator = homeCoordinator
+        taskCompletionRefresh = CoalescingRefreshScheduler(queue: .main) { [weak self] finished in
+            if let self, self.hasStarted, self.refreshAfterCodexTask {
+                self.refresh(queueIfBusy: true)
+            }
+            finished()
+        }
         self.homeCoordinator.onChange = { [weak self] presentation in
             guard let self else { return }
             self.homeStatuses = presentation.statuses
@@ -737,6 +746,11 @@ final class UsageStore: ObservableObject {
         }
         self.codexTaskClient.onSnapshot = { [weak self] snapshot in
             self?.applyCodexLiveTasks(snapshot)
+        }
+        self.codexTaskClient.onTaskCompleted = { [weak self] in
+            guard let self, self.hasStarted, self.refreshAfterCodexTask else { return }
+            // 给本地计数落盘留出时间，多个任务同时结束时合并刷新
+            self.taskCompletionRefresh.request(after: 1)
         }
     }
 
@@ -806,6 +820,7 @@ final class UsageStore: ObservableObject {
         statisticsRolloverTimer?.invalidate()
         statisticsFeedbackTimer?.invalidate()
         performanceSampleTimer?.invalidate()
+        taskCompletionRefresh.cancel()
         if let systemTimeZoneObserver {
             NotificationCenter.default.removeObserver(systemTimeZoneObserver)
             self.systemTimeZoneObserver = nil
@@ -823,11 +838,22 @@ final class UsageStore: ObservableObject {
         PerformanceMonitor.shared.flush()
     }
 
-    func refresh(queueIfBusy: Bool = false) {
+    func refresh(queueIfBusy: Bool = true) {
         guard hasStarted else { return }
-        homeCoordinator.refresh(context: RuntimeLoadContext.live(statisticsPreference: statisticsPreference))
+        homeCoordinator.refresh(context: RuntimeLoadContext.live(statisticsPreference: statisticsPreference), queueIfBusy: queueIfBusy)
         lastFullRefreshCompletedAt = Date()
         scheduleFullRefreshTimer()
+    }
+
+    func updateRefreshPreferences(interval: UsageRefreshInterval, afterCodexTask: Bool) {
+        let intervalChanged = interval != refreshInterval
+        refreshInterval = interval
+        refreshAfterCodexTask = afterCodexTask
+        if !afterCodexTask { taskCompletionRefresh.cancel() }
+        guard hasStarted, intervalChanged else { return }
+        scheduleFullRefreshTimer()
+        updateTaskBoardPollingState(refreshImmediately: false)
+        refreshIfStale(maximumAge: interval.seconds(foreground: isMainWindowActive))
     }
 
     func updateStatisticsTimeZone(_ preference: StatisticsTimeZonePreference) {
@@ -1021,7 +1047,7 @@ final class UsageStore: ObservableObject {
             interval: interval,
             repeats: true
         ) { [weak self] _ in
-            self?.refresh()
+            self?.refresh(queueIfBusy: false)
         }
         timer.tolerance = interval * 0.1
         RunLoop.main.add(timer, forMode: .common)
@@ -3957,9 +3983,19 @@ final class AppSettings: ObservableObject {
     private static let automaticUpdateChecksEnabledKey = "codexU.update.autoCheckEnabled"
     private static let skippedUpdateVersionKey = "codexU.update.skippedVersion"
     private static let paletteIDKey = "codexU.paletteID"
+    private static let refreshIntervalKey = "codexU.refreshInterval"
+    private static let refreshAfterCodexTaskKey = "codexU.refreshAfterCodexTask"
 
     private let defaults: UserDefaults
     let paletteCatalog: PaletteCatalog
+
+    @Published var refreshInterval: UsageRefreshInterval {
+        didSet { defaults.set(refreshInterval.rawValue, forKey: Self.refreshIntervalKey) }
+    }
+
+    @Published var refreshAfterCodexTask: Bool {
+        didSet { defaults.set(refreshAfterCodexTask, forKey: Self.refreshAfterCodexTaskKey) }
+    }
 
     @Published var language: WidgetLanguage {
         didSet {
@@ -4032,6 +4068,9 @@ final class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard, paletteCatalog: PaletteCatalog = .loadFromMainBundle()) {
         self.defaults = defaults
         self.paletteCatalog = paletteCatalog
+        refreshInterval = defaults.string(forKey: Self.refreshIntervalKey)
+            .flatMap(UsageRefreshInterval.init(rawValue:)) ?? .automatic
+        refreshAfterCodexTask = defaults.object(forKey: Self.refreshAfterCodexTaskKey) as? Bool ?? true
         let storedPaletteID = defaults.string(forKey: Self.paletteIDKey)
         if let storedPaletteID, paletteCatalog.contains(storedPaletteID) {
             paletteID = storedPaletteID
@@ -5041,8 +5080,29 @@ struct SettingsPanelView: View {
 
                 settingsSection(
                     title: language.text("数据与统计", "Data & Statistics"),
-                    detail: language.text("自然日口径", "Calendar-day basis")
+                    detail: language.text("刷新与自然日口径", "Refresh and calendar days")
                 ) {
+                    SettingsPickerRow(
+                        title: language.text("自动刷新间隔", "Auto-refresh interval"),
+                        detail: language.text("额度与任务按此间隔更新；历史记录另行增量更新", "Quota and tasks use this interval; history updates incrementally")
+                    ) {
+                        Picker(language.text("自动刷新间隔", "Auto-refresh interval"), selection: $settings.refreshInterval) {
+                            ForEach(UsageRefreshInterval.allCases, id: \.self) { interval in
+                                Text(interval.title(language)).tag(interval)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(width: settingsAccessoryColumnWidth, height: settingsControlVisualHeight)
+                    }
+
+                    SettingsToggleRow(
+                        title: language.text("Codex 任务完成后刷新", "Refresh after Codex tasks"),
+                        detail: language.text("收到任务结束通知后更新，后台同样生效", "Refresh on task completion, including while the window is hidden")
+                    ) {
+                        SettingsSwitchToggle(isOn: $settings.refreshAfterCodexTask)
+                    }
+
                     SettingsPickerRow(
                         title: language.text("统计时区", "Statistics time zone"),
                         detail: statisticsTimeZoneDetail
@@ -11200,6 +11260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
             _ = installGlobalHotKeyHandler()
         }
         store.updateVisibleRuntimeScopes(settings.visibleRuntimeScopes)
+        store.updateRefreshPreferences(interval: settings.refreshInterval, afterCodexTask: settings.refreshAfterCodexTask)
         store.start()
         updateStore.startAutomaticCheck()
         PerformanceMonitor.shared.end(startupPerformanceSpan)
@@ -11526,6 +11587,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
     }
 
     private func observeSettings() {
+        settings.$refreshInterval.combineLatest(settings.$refreshAfterCodexTask)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] interval, afterCodexTask in
+                self?.store.updateRefreshPreferences(interval: interval, afterCodexTask: afterCodexTask)
+            }
+            .store(in: &cancellables)
+
         settings.$keepMainWindowOnTop
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -11601,7 +11669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         }
 
         guard let button = statusItem?.button else { return }
-        store.refreshIfStale(maximumAge: 5 * 60)
+        store.refreshIfStale(maximumAge: store.refreshInterval.seconds(foreground: true))
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
@@ -12103,6 +12171,9 @@ struct codexUMain {
         }
         if CommandLine.arguments.contains("--self-test-home-startup") {
             exit(HomeStartupSelfTest.run() ? 0 : 1)
+        }
+        if CommandLine.arguments.contains("--self-test-refresh-scheduling") {
+            exit(RefreshSchedulingSelfTest.run() ? 0 : 1)
         }
         if let index = CommandLine.arguments.firstIndex(of: "--read-home-tasks"),
            CommandLine.arguments.indices.contains(index + 1),

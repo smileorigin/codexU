@@ -252,6 +252,32 @@ enum HomeStartupSelfTest {
                    "stopped coordinators must ignore callbacks from outstanding workers")
         }
 
+        // 任务结束时的刷新不能被进行中的旧读取吞掉
+        do {
+            let gate = SourceGate()
+            let calls = SourceCounter()
+            var loaders = emptyLoaders()
+            loaders.quota = { scope, context in
+                let call = calls.next(scope: scope)
+                if call == 1 { gate.wait() }
+                return makeRuntime(scope, observedAt: context.now, usedPercent: Double(call))
+            }
+            let coordinator = UsageRefreshCoordinator(loaders: loaders, foregroundDeadline: 0.04, historyDelay: 0.01)
+            var latest: HomePresentation?
+            coordinator.onChange = { latest = $0 }
+            coordinator.start(context: context)
+            for _ in 0..<20 { coordinator.refresh(context: context, queueIfBusy: true) }
+            gate.release()
+            expect(waitUntil {
+                latest?.snapshot.runtime(for: .codex)?.snapshot.fiveHourQuota?.usedPercent == 2
+                    && latest?.snapshot.runtime(for: .claudeCode)?.snapshot.fiveHourQuota?.usedPercent == 2
+            }, "忙时任务结束请求应在旧读取完成后执行一次，不能丢失或堆积 20 次")
+            pump(for: 0.03)
+            expect(latest?.snapshot.runtime(for: .codex)?.snapshot.fiveHourQuota?.usedPercent == 2,
+                   "合并后的后续读取不应自行循环")
+            coordinator.stop()
+        }
+
         // A bounded page must keep visible live states working even when most
         // source records were not materialized. Only visible moves affect counts.
         do {

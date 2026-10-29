@@ -10,6 +10,7 @@ enum TaskConnectionReason: Hashable {
 
 protocol CodexTaskEventClient: AnyObject {
     var onSnapshot: ((CodexTaskLiveSnapshot) -> Void)? { get set }
+    var onTaskCompleted: (() -> Void)? { get set }
     func start(reason: TaskConnectionReason)
     func stopIfIdle()
     func stop()
@@ -88,6 +89,7 @@ enum POSIXPipeReaderSelfTest {
 
 final class CodexAppServerTaskClient: CodexTaskEventClient {
     var onSnapshot: ((CodexTaskLiveSnapshot) -> Void)?
+    var onTaskCompleted: (() -> Void)?
 
     private let queue = DispatchQueue(label: "com.codexu.task-app-server", qos: .utility)
     private let readerQueue = DispatchQueue(label: "com.codexu.task-app-server.reader", qos: .utility)
@@ -107,6 +109,8 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
     private var initializeTimeout: DispatchWorkItem?
     private var isStopping = false
     private var connectionGeneration: UInt64 = 0
+    private var recentCompletedTurns: [CodexTaskCompletion] = []
+    private var reconnect: DispatchWorkItem?
 
     private let initializeRequestID: Int64 = 1
     private let maximumOutputBufferBytes = 1 * 1_024 * 1_024
@@ -125,14 +129,14 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
         queue.async { [weak self] in
             guard let self else { return }
             self.activeReasons.insert(reason)
+            self.reconnect?.cancel()
+            self.reconnect = nil
             if self.process?.isRunning == true {
                 if reason != .startup { self.requestThreadList() }
                 return
             }
 
-            let sharedDaemonAvailable = self.fileManager.fileExists(atPath: self.defaultDaemonSocket.path)
-            guard sharedDaemonAvailable else { return }
-            self.launch(mode: .sharedDaemon)
+            self.connectIfAvailable()
         }
     }
 
@@ -150,6 +154,8 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
     func stop() {
         queue.async { [weak self] in
             self?.activeReasons.removeAll()
+            self?.reconnect?.cancel()
+            self?.reconnect = nil
             self?.stopProcess()
         }
     }
@@ -167,10 +173,30 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
             .appendingPathComponent("app-server-control.sock")
     }
 
+    private func connectIfAvailable() {
+        guard !activeReasons.isEmpty, process == nil else { return }
+        guard fileManager.fileExists(atPath: defaultDaemonSocket.path) else {
+            scheduleReconnect()
+            return
+        }
+        launch(mode: .sharedDaemon)
+    }
+
+    private func scheduleReconnect() {
+        guard !activeReasons.isEmpty, reconnect == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            self?.reconnect = nil
+            self?.connectIfAvailable()
+        }
+        reconnect = work
+        queue.asyncAfter(deadline: .now() + 10, execute: work)
+    }
+
     private func launch(mode: TaskConnectionMode) {
         guard let codexURL = resolveCodexExecutableURL() else {
             reducer.disconnect()
             publishSnapshot()
+            scheduleReconnect()
             return
         }
 
@@ -207,6 +233,7 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
             connectionMode = .disconnected
             reducer.disconnect()
             publishSnapshot()
+            scheduleReconnect()
             return
         }
 
@@ -307,6 +334,12 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
         if let method = object["method"] as? String {
             guard object["id"] == nil else { return }
             let params = object["params"] as? [String: Any] ?? [:]
+            if let completion = CodexTaskCompletion(method: method, params: params),
+               !recentCompletedTurns.contains(completion) {
+                recentCompletedTurns.append(completion)
+                if recentCompletedTurns.count > 128 { recentCompletedTurns.removeFirst() }
+                DispatchQueue.main.async { [weak self] in self?.onTaskCompleted?() }
+            }
             if reducer.applyNotification(method: method, params: params) {
                 publishSnapshot()
             }
@@ -426,6 +459,7 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
         connectionMode = .disconnected
         reducer.disconnect()
         publishSnapshot()
+        scheduleReconnect()
         if let disconnectedProcess, disconnectedProcess.isRunning {
             let pid = disconnectedProcess.processIdentifier
             disconnectedProcess.terminate()
@@ -455,5 +489,23 @@ final class CodexAppServerTaskClient: CodexTaskEventClient {
         if let value = value as? Int64 { return value }
         if let value = value as? NSNumber { return value.int64Value }
         return nil
+    }
+
+    static func testCompletionNotifications() -> Bool {
+        let client = CodexAppServerTaskClient()
+        var calls = 0
+        client.onTaskCompleted = { calls += 1 }
+        let notification = #"{"method":"turn/completed","params":{"threadId":"thread-a","turn":{"id":"turn-a","status":"completed"}}}"#
+        let bytes = Data((notification + "\n").utf8)
+        client.queue.sync {
+            _ = client.consume(bytes.prefix(20))
+            _ = client.consume(bytes.dropFirst(20))
+            _ = client.consume(bytes)
+            _ = client.consume(Data((#"{"id":4,"method":"turn/completed","params":{"threadId":"thread-a","turn":{"id":"turn-b","status":"completed"}}}"# + "\n").utf8))
+            _ = client.consume(Data((#"{"method":"turn/completed","params":{"threadId":"thread-a","turn":{"id":"turn-b","status":"inProgress"}}}"# + "\n").utf8))
+        }
+        let deadline = Date().addingTimeInterval(1)
+        while calls == 0, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.005)) }
+        return calls == 1
     }
 }

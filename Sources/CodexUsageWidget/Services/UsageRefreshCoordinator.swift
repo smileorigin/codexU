@@ -39,6 +39,7 @@ final class UsageRefreshCoordinator {
     private var runtimes: [RuntimeScope: RuntimeUsageSnapshot] = [:]
     private var leadership: LeadershipDashboardSnapshot = .empty
     private var inFlight = Set<HomeDataKey>()
+    private var fastFollowups = Set<HomeDataKey>()
     private var fastRequestID: UInt64 = 0
     private var fastRequests: [HomeDataKey: UInt64] = [:]
     private var historyRunning = false
@@ -80,11 +81,12 @@ final class UsageRefreshCoordinator {
         watchdog?.cancel()
         historyStart?.cancel()
         pendingSave?.cancel()
+        fastFollowups.removeAll()
         if loaders.usesHistoryIndex { UsageHistoryService.shared.stop() }
         onChange = nil
     }
 
-    func refresh(context: RuntimeLoadContext) {
+    func refresh(context: RuntimeLoadContext, queueIfBusy: Bool = false) {
         dispatchPrecondition(condition: .onQueue(.main))
         guard active else { return }
         let previous = self.context
@@ -120,14 +122,14 @@ final class UsageRefreshCoordinator {
             DispatchQueue.main.asyncAfter(deadline: .now() + foregroundDeadline, execute: deadline)
         }
         for scope in RuntimeScope.allCases {
-            launchFast(scope: scope, kind: .quota)
-            launchFast(scope: scope, kind: .tasks)
+            launchFast(scope: scope, kind: .quota, queueIfBusy: queueIfBusy)
+            launchFast(scope: scope, kind: .tasks, queueIfBusy: queueIfBusy)
             let key = HomeDataKey(scope: scope, kind: .local)
             if !historyRunning { statuses[key, default: HomeLoadStatus()].begin() }
         }
         let leaderKey = HomeDataKey(scope: nil, kind: .leadership)
         if !historyRunning { statuses[leaderKey, default: HomeLoadStatus()].begin() }
-        if !historyRunning || changed { historyRequested = true }
+        if !historyRunning || changed || queueIfBusy { historyRequested = true }
         scheduleHistory()
         publish()
     }
@@ -143,9 +145,13 @@ final class UsageRefreshCoordinator {
             && a.statistics.dayKey(for: a.now) == b.statistics.dayKey(for: b.now)
     }
 
-    private func launchFast(scope: RuntimeScope, kind: HomeDataKind) {
+    private func launchFast(scope: RuntimeScope, kind: HomeDataKind, queueIfBusy: Bool = false) {
         let key = HomeDataKey(scope: scope, kind: kind)
-        guard let context, !inFlight.contains(key) else { return }
+        guard let context else { return }
+        if inFlight.contains(key) {
+            if queueIfBusy { fastFollowups.insert(key) }
+            return
+        }
         inFlight.insert(key)
         fastRequestID &+= 1
         let requestID = fastRequestID
@@ -167,12 +173,16 @@ final class UsageRefreshCoordinator {
                 self.inFlight.remove(key)
                 guard self.active else { return }
                 guard requestEpoch == self.epoch else {
+                    self.fastFollowups.remove(key)
                     self.launchFast(scope: scope, kind: kind)
                     return
                 }
                 if kind == .quota { self.acceptQuota(quota, scope: scope) }
                 else { self.acceptTasks(tasks, scope: scope) }
                 self.publish(save: true)
+                if self.fastFollowups.remove(key) != nil {
+                    self.launchFast(scope: scope, kind: kind)
+                }
             }
         }
     }
@@ -221,7 +231,8 @@ final class UsageRefreshCoordinator {
             self?.startHistory()
         }
         historyStart = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + historyDelay, execute: work)
+        let delay = loaders.usesHistoryIndex && restorationComplete ? 0 : historyDelay
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     // Only complete archive cuts may replace last-known complete display data.

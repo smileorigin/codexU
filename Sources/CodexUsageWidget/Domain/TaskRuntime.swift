@@ -334,6 +334,22 @@ struct CodexTaskLiveSnapshot: Equatable {
     )
 }
 
+struct CodexTaskCompletion: Hashable {
+    let threadID: String
+    let turnID: String
+
+    init?(method: String, params: [String: Any]) {
+        guard method == "turn/completed",
+              let threadID = params["threadId"] as? String, !threadID.isEmpty,
+              let turn = params["turn"] as? [String: Any],
+              let turnID = turn["id"] as? String, !turnID.isEmpty,
+              let status = turn["status"] as? String,
+              ["completed", "failed", "interrupted"].contains(status) else { return nil }
+        self.threadID = threadID
+        self.turnID = turnID
+    }
+}
+
 struct TaskRuntimeReducer {
     private(set) var connectionMode: TaskConnectionMode = .disconnected
     private var records: [String: TaskLiveRecord] = [:]
