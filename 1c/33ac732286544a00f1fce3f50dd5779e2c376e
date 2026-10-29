@@ -1,0 +1,48 @@
+scripts/test-history-index.sh
+  s_1b08bc9cf43a80::t_42edee2a736fc8 7
+Sources/CodexUsageWidget/main.swift
+  s_1b08bc9cf43a80::t_2c82bd7c28d329 12175-12176
+  s_1b08bc9cf43a80::t_bb74d2f2b8c527 717-722,730-735,750-754,823,841,843,848-858,1050,3986-3987,3992-3999,4071-4073,5083,5085-5105,11263,11590-11596,11672,12177
+Sources/CodexUsageWidget/Services/CodexAppServerTaskClient.swift
+  s_1b08bc9cf43a80::t_4a62b5bc89d4ea 236,493-509
+  s_1b08bc9cf43a80::t_4ed4594a2b74de 13,92,112-113,132-133,139,157-158,176-194,199,337-342,462,510
+Sources/CodexUsageWidget/Services/UsageHistoryServiceSelfTest.swift
+  s_1b08bc9cf43a80::t_092662cb7e68a8 17,21,29-44,46-47
+Sources/CodexUsageWidget/Services/RefreshScheduling.swift
+  s_1b08bc9cf43a80::t_a3530d68f17cea 1-85
+README.md
+  s_1b08bc9cf43a80::t_42edee2a736fc8 80-81
+README.en.md
+  s_1b08bc9cf43a80::t_42edee2a736fc8 68-69
+Sources/CodexUsageWidget/Domain/TaskRuntime.swift
+  s_1b08bc9cf43a80::t_cd28013df170bf 337-352
+Sources/CodexUsageWidget/Services/HomeStartupSelfTest.swift
+  s_1b08bc9cf43a80::t_092662cb7e68a8 255-280
+Sources/CodexUsageWidget/Services/UsageHistoryService.swift
+  s_1b08bc9cf43a80::t_cf7fd37e29e9d6 187
+  s_1b08bc9cf43a80::t_41726b64555988 15
+  s_1b08bc9cf43a80::t_2932001e93eed2 14,16-31,44-50,79-80,188
+Sources/CodexUsageWidget/Services/UsageRefreshCoordinator.swift
+  s_1b08bc9cf43a80::t_85a57d3cc942d3 42,84,89,125-126,148,150-154,176,183-185,234-235
+  s_1b08bc9cf43a80::t_092662cb7e68a8 132
+Makefile
+  s_1b08bc9cf43a80::t_42edee2a736fc8 70-73
+Sources/CodexUsageWidget/Services/RefreshSchedulingSelfTest.swift
+  s_1b08bc9cf43a80::t_6290afac85556a 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1c33ac732286544a00f1fce3f50dd5779e2c376e",
+  "prompts": {},
+  "sessions": {
+    "s_1b08bc9cf43a80": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1818f-8e90-7e22-a55c-4f47a8c84487",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wushiyang <wushiyang@bytedance.com>"
+    }
+  }
+}
