@@ -11100,48 +11100,19 @@ final class DraggableHostingView<Content: View>: NSHostingView<Content> {
     override var mouseDownCanMoveWindow: Bool { true }
 }
 
-final class GlassHostingContainer<Content: View>: NSView {
-    private let cornerRadius: CGFloat
-
+final class ThemedHostingContainer<Content: View>: NSView {
     init(rootView: Content, cornerRadius: CGFloat) {
-        self.cornerRadius = cornerRadius
         super.init(frame: .zero)
 
         wantsLayer = true
         layer?.cornerRadius = cornerRadius
+        layer?.masksToBounds = true
 
+        // 窗口提供不透明的系统主题底色，内容层不采样桌面背景
         let host = DraggableHostingView(rootView: rootView)
         host.frame = bounds
         host.autoresizingMask = [.width, .height]
-
-#if compiler(>=6.2) && CODEXU_HAS_LIQUID_GLASS
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: bounds)
-            glass.autoresizingMask = [.width, .height]
-            glass.cornerRadius = cornerRadius
-            glass.style = .regular
-            glass.tintColor = nil
-            glass.contentView = host
-            addSubview(glass)
-        } else {
-            installMaterialFallback(host: host)
-        }
-#else
-        installMaterialFallback(host: host)
-#endif
-    }
-
-    private func installMaterialFallback(host: NSView) {
-        let material = NSVisualEffectView(frame: bounds)
-        material.autoresizingMask = [.width, .height]
-        material.material = .hudWindow
-        material.blendingMode = .behindWindow
-        material.state = .followsWindowActiveState
-        material.wantsLayer = true
-        material.layer?.cornerRadius = cornerRadius
-        material.layer?.masksToBounds = true
-        material.addSubview(host)
-        addSubview(material)
+        addSubview(host)
     }
 
     required init?(coder: NSCoder) {
@@ -11163,8 +11134,8 @@ final class MainAppWindow: NSWindow {
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isReleasedWhenClosed = false
-        isOpaque = false
-        backgroundColor = .clear
+        isOpaque = true
+        backgroundColor = .windowBackgroundColor
         hasShadow = true
         isMovableByWindowBackground = true
         acceptsMouseMovedEvents = true
@@ -11249,7 +11220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
         mainWindow.maxSize = CGSize(width: UsageWidgetView.widgetMaxWidth, height: .greatestFiniteMagnitude)
         mainWindow.contentMinSize = mainWindow.minSize
         mainWindow.contentMaxSize = mainWindow.maxSize
-        mainWindow.contentView = GlassHostingContainer(
+        mainWindow.contentView = ThemedHostingContainer(
             rootView: UsageWidgetView(
                 store: store,
                 settings: settings,
@@ -11490,13 +11461,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
             settingsWindow.titleVisibility = .hidden
             settingsWindow.titlebarAppearsTransparent = true
             settingsWindow.isReleasedWhenClosed = false
-            settingsWindow.isOpaque = false
-            settingsWindow.backgroundColor = .clear
+            settingsWindow.isOpaque = true
+            settingsWindow.backgroundColor = .windowBackgroundColor
             settingsWindow.hasShadow = true
             settingsWindow.isMovableByWindowBackground = true
             settingsWindow.acceptsMouseMovedEvents = true
             settingsWindow.delegate = self
-            settingsWindow.contentView = GlassHostingContainer(
+            settingsWindow.contentView = ThemedHostingContainer(
                 rootView: SettingsPanelView(
                     settings: settings,
                     store: store,
@@ -11530,14 +11501,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPo
             paletteLibraryWindow.titleVisibility = .hidden
             paletteLibraryWindow.titlebarAppearsTransparent = true
             paletteLibraryWindow.isReleasedWhenClosed = false
-            paletteLibraryWindow.isOpaque = false
-            paletteLibraryWindow.backgroundColor = .clear
+            paletteLibraryWindow.isOpaque = true
+            paletteLibraryWindow.backgroundColor = .windowBackgroundColor
             paletteLibraryWindow.hasShadow = true
             paletteLibraryWindow.isMovableByWindowBackground = true
             paletteLibraryWindow.acceptsMouseMovedEvents = true
             paletteLibraryWindow.delegate = self
             paletteLibraryWindow.contentMinSize = NSSize(width: 660, height: 320)
-            paletteLibraryWindow.contentView = GlassHostingContainer(
+            paletteLibraryWindow.contentView = ThemedHostingContainer(
                 rootView: PaletteLibraryView(settings: settings),
                 cornerRadius: 20
             )

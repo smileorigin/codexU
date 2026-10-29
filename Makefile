@@ -21,12 +21,7 @@ DMG_PATH := $(DIST_DIR)/$(DMG_NAME)
 SIGN_IDENTITY ?= -
 CODESIGN_EXTRA_FLAGS ?=
 SWIFTC_TARGET_FLAGS := -target $(TARGET_TRIPLE)
-MACOS_SDK_MAJOR := $(shell xcrun --sdk macosx --show-sdk-version 2>/dev/null | cut -d. -f1)
 SWIFTC_FEATURE_FLAGS :=
-
-ifeq ($(shell test "$(MACOS_SDK_MAJOR)" -ge 26 2>/dev/null && echo yes),yes)
-SWIFTC_FEATURE_FLAGS += -D CODEXU_HAS_LIQUID_GLASS
-endif
 
 ifeq ($(SIGN_IDENTITY),-)
 CODESIGN_FLAGS := --force --deep --sign -
