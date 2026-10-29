@@ -1,0 +1,76 @@
+Sources/CodexUsageWidget/Services/UsageParseHelper.swift
+  s_1b08bc9cf43a80::t_84027cd55ea832 154
+  s_1b08bc9cf43a80::t_7f0e762b2fd6a0 137,155-158,163,179,183,189,193,203-204
+Sources/CodexUsageWidget/Services/UsageParseSource.swift
+  s_1b08bc9cf43a80::t_4294df4ee23272 1-12,24-85
+  s_1b08bc9cf43a80::t_84027cd55ea832 13-23
+Sources/CodexUsageWidget/Services/UsageIndexStore.swift
+  s_1b08bc9cf43a80::t_4294df4ee23272 7
+Sources/CodexUsageWidget/Services/UsageIndexWorkerSelfTest.swift
+  s_1b08bc9cf43a80::t_9c42848ad7a02b 68-80,107
+  s_1b08bc9cf43a80::t_e84c7300c5a2bc 81
+Vendor/zstd/README.md
+  s_1b08bc9cf43a80::t_93cea4f59ffbad 1-20
+Sources/CodexUsageDecoder/decoder.h
+  s_1b08bc9cf43a80::t_dbd63028cb3191 1-7
+.github/workflows/release-packages.yml
+  s_1b08bc9cf43a80::t_d9d0bddcfa7733 106
+Sources/CodexUsageWidget/Services/UsageIndexWorker.swift
+  s_1b08bc9cf43a80::t_9d82e770be2758 182
+  s_1b08bc9cf43a80::t_5981494b9bbb39 174,176-179
+Sources/CodexUsageDecoder/decoder.c
+  s_1b08bc9cf43a80::t_dbd63028cb3191 1-31,34-36,41-49,52-56
+  s_1b08bc9cf43a80::t_84027cd55ea832 32-33,37-40,50-51
+Sources/CodexUsageWidget/Services/UsageIndexSelfTest.swift
+  s_1b08bc9cf43a80::t_4277b9616f095b 32
+Sources/CodexUsageWidget/Services/UsageParseSourceSelfTest.swift
+  s_1b08bc9cf43a80::t_9c42848ad7a02b 1-27,30-62,70-77,79-84,86-90,120-122
+  s_1b08bc9cf43a80::t_e84c7300c5a2bc 28-29,63-69
+  s_1b08bc9cf43a80::t_36dc962f98b00f 85,91-119
+  s_1b08bc9cf43a80::t_9d82e770be2758 78
+Vendor/zstd/zstd_errors.h
+  s_1b08bc9cf43a80::t_13af179da010e5 1-107
+Vendor/zstd/zstd.h
+  s_1b08bc9cf43a80::t_8e87d22da8cf0c 1-3198
+README.md
+  s_1b08bc9cf43a80::t_e9c3d90c56e5d5 228
+  s_1b08bc9cf43a80::t_84027cd55ea832 227
+Makefile
+  s_1b08bc9cf43a80::t_4d8b0c720aa90a 45,58
+  s_1b08bc9cf43a80::t_4294df4ee23272 10
+  s_1b08bc9cf43a80::t_dbd63028cb3191 41-44,46-49,61
+docs/HISTORY_INDEX_ACCEPTANCE.md
+  s_1b08bc9cf43a80::t_93cea4f59ffbad 9-12,24
+  s_1b08bc9cf43a80::t_b25dc3d9ff3343 25
+Sources/CodexUsageWidget/Services/UsageStreamParser.swift
+  s_1b08bc9cf43a80::t_4294df4ee23272 29-30,34,139,156
+DISTRIBUTION.md
+  s_1b08bc9cf43a80::t_d9d0bddcfa7733 16-17
+Sources/CodexUsageWidget/Services/UsageFileStamp.swift
+  s_1b08bc9cf43a80::t_4294df4ee23272 15-17,51-52
+Vendor/zstd/LICENSE
+  s_1b08bc9cf43a80::t_8e87d22da8cf0c 1-30
+tests/fixtures/history-index/README.md
+  s_1b08bc9cf43a80::t_e84c7300c5a2bc 8-13
+Sources/CodexUsageWidget/Services/UsageIndexJobs.swift
+  s_1b08bc9cf43a80::t_5981494b9bbb39 30,35-36
+  s_1b08bc9cf43a80::t_9d82e770be2758 29,32-34,70,74,76
+Vendor/zstd/zstddeclib.c
+  s_1b08bc9cf43a80::t_8e87d22da8cf0c 1-22241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17e1595b2587f22b570c0b3f4120f4f18f685313",
+  "prompts": {},
+  "sessions": {
+    "s_1b08bc9cf43a80": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1818f-8e90-7e22-a55c-4f47a8c84487",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wushiyang <wushiyang@bytedance.com>"
+    }
+  }
+}
