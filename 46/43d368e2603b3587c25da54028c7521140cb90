@@ -1,0 +1,30 @@
+docs/DESIGN_SYSTEM.md
+  s_1b08bc9cf43a80::t_ebf148310cf021 32-33
+Sources/CodexUsageWidget/main.swift
+  s_1b08bc9cf43a80::t_f055ad1f438814 11504
+  s_79b7ee1020d266::t_43b92623e47eba 11103,11109,11111,11115,11137-11138,11223,11464-11465,11470,11505,11511
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4643d368e2603b3587c25da54028c7521140cb90",
+  "prompts": {},
+  "sessions": {
+    "s_1b08bc9cf43a80": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1818f-8e90-7e22-a55c-4f47a8c84487",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "wushiyang <wushiyang@bytedance.com>"
+    },
+    "s_79b7ee1020d266": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17b5b-19d8-7252-8bc8-0e065ed64f62",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "wushiyang <wushiyang@bytedance.com>"
+    }
+  }
+}
