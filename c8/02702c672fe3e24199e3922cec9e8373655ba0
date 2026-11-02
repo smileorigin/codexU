@@ -1,0 +1,43 @@
+Sources/CodexUsageWidget/main.swift
+  s_1b08bc9cf43a80::t_15eff543626add 4423-4426,4464-4465,4484,7641-7643
+Sources/CodexUsageWidget/Services/HomeStartupSelfTest.swift
+  s_1b08bc9cf43a80::t_c61bb49b625277 281-310
+Sources/CodexUsageWidget/Domain/HomeLoadingState.swift
+  s_1b08bc9cf43a80::t_15eff543626add 78-83
+Sources/CodexUsageWidget/Services/UsageDayArchive.swift
+  s_1b08bc9cf43a80::t_15eff543626add 48,56-71
+Sources/CodexUsageWidget/Services/UsageHistoryServiceSelfTest.swift
+  s_1b08bc9cf43a80::t_fa88340a21bd92 2,49,55-128,130
+  s_79b7ee1020d266::t_e3ad0bf7f6a085 129,131
+Sources/CodexUsageWidget/Services/UsageRefreshCoordinator.swift
+  s_1b08bc9cf43a80::t_15eff543626add 257-258
+docs/HISTORY_INDEX_ACCEPTANCE.md
+  s_1b08bc9cf43a80::t_fa88340a21bd92 13,15,28
+  s_79b7ee1020d266::t_a595b40be3800f 29
+Sources/CodexUsageWidget/Services/UsageArchiveSelfTest.swift
+  s_1b08bc9cf43a80::t_c61bb49b625277 60,65,69-72,83-116,133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c802702c672fe3e24199e3922cec9e8373655ba0",
+  "prompts": {},
+  "sessions": {
+    "s_1b08bc9cf43a80": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1818f-8e90-7e22-a55c-4f47a8c84487",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "smileorigin <smileorigin@foxmail.com>"
+    },
+    "s_79b7ee1020d266": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17b5b-19d8-7252-8bc8-0e065ed64f62",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "smileorigin <smileorigin@foxmail.com>"
+    }
+  }
+}
