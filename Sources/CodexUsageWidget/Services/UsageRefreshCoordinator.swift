@@ -254,7 +254,8 @@ final class UsageRefreshCoordinator {
             let old = runtimes[scope] ?? emptyRuntime(scope)
             let local = result.local.preservingDetails(from: old.snapshot.local, when: !result.hasDetails)
             runtimes[scope] = runtimeWith(old, local: local, taskBoard: old.snapshot.taskBoard, observedAt: result.observedAt)
-            statuses[key] = HomeLoadStatus(phase: .ready, observedAt: result.observedAt,
+            let currentDayCovered = context.map { local.hasCurrentPeriodData(.day, statistics: $0.statistics) } ?? false
+            statuses[key] = HomeLoadStatus(phase: currentDayCovered ? .ready : .cached, observedAt: result.observedAt,
                 hasDetails: result.hasDetails || statuses[key]?.hasDetails == true)
         } else {
             statuses[key, default: HomeLoadStatus()].phase = .background

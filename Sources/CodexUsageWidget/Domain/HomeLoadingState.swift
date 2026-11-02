@@ -75,6 +75,12 @@ struct HomePresentation {
 }
 
 extension LocalUsage {
+    func hasCurrentPeriodData(_ period: Calendar.Component, statistics: StatisticsContext) -> Bool {
+        guard let lastUpdatedAt,
+              let start = statistics.calendar.dateInterval(of: period, for: statistics.now)?.start else { return false }
+        return lastUpdatedAt >= start
+    }
+
     // The aggregate is used for the home total. Never regroup every historical
     // project, tool, event or day on the main thread when a quota reply arrives.
     var homeSummary: LocalUsage {

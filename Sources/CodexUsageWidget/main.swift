@@ -4420,7 +4420,10 @@ struct UsageWidgetView: View {
     }
 
     private var usageOverviewSection: some View {
-        HStack(alignment: .top, spacing: 14) {
+        let statistics = StatisticsContext(preference: store.statisticsPreference, now: Date())
+        let todayCovered = snapshot.local?.hasCurrentPeriodData(.day, statistics: statistics) == true
+        let monthCovered = snapshot.local?.hasCurrentPeriodData(.month, statistics: statistics) == true
+        return HStack(alignment: .top, spacing: 14) {
             LeadershipCommandRadiusButton(
                 snapshot: store.multiRuntimeSnapshot.leadership,
                 language: language,
@@ -4458,8 +4461,8 @@ struct UsageWidgetView: View {
                     DetailedTokenMetricCard(
                         title: language.text("今日", "Today"),
                         systemName: "sun.max.fill",
-                        usage: snapshot.local?.detailedUsage?.today,
-                        fallbackTokens: snapshot.local?.todayTokens,
+                        usage: todayCovered ? snapshot.local?.detailedUsage?.today : nil,
+                        fallbackTokens: todayCovered ? snapshot.local?.todayTokens : nil,
                         language: language
                     )
                     DetailedTokenMetricCard(
@@ -4478,7 +4481,7 @@ struct UsageWidgetView: View {
                     )
                 }
 
-                WoolProgressCard(usage: snapshot.local?.detailedUsage?.month, language: language)
+                WoolProgressCard(usage: monthCovered ? snapshot.local?.detailedUsage?.month : nil, language: language)
             }
             .frame(maxWidth: .infinity)
         }
@@ -7635,7 +7638,9 @@ struct WoolProgressCard: View {
                 Text((usesReferencePricing ? "≈" : "") + formatUSD(usage?.estimatedCostUSD))
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .help(usesReferencePricing
+                    .help(usage == nil
+                        ? language.text("本月统计尚未更新", "This month's usage has not been updated yet")
+                        : usesReferencePricing
                         ? language.text(
                             "包含缺少专属价格的模型或计费条件，按参考费率折算；不代表实际账单",
                             "Includes reference rates for unpriced models or billing conditions; this is not an actual bill"

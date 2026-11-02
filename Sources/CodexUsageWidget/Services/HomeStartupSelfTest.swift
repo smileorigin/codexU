@@ -278,6 +278,36 @@ enum HomeStartupSelfTest {
             coordinator.stop()
         }
 
+        // 跨日、跨月的旧完整结果不代表当前周期有零用量
+        do {
+            let formatter = ISO8601DateFormatter()
+            let now = formatter.date(from: "2026-11-02T12:00:00Z")!
+            let context = makeContext(now: now)
+            let october = makeRuntime(.codex, observedAt: formatter.date(from: "2026-10-31T23:59:59Z")!, tokens: 0).snapshot.local!
+            let yesterday = makeRuntime(.codex, observedAt: formatter.date(from: "2026-11-01T23:59:59Z")!, tokens: 0).snapshot.local!
+            let current = makeRuntime(.codex, observedAt: now, tokens: 0).snapshot.local!
+            expect(!october.hasCurrentPeriodData(.day, statistics: context.statistics)
+                && !october.hasCurrentPeriodData(.month, statistics: context.statistics),
+                   "上月结果不能填入今日与本月卡片")
+            expect(!yesterday.hasCurrentPeriodData(.day, statistics: context.statistics)
+                && yesterday.hasCurrentPeriodData(.month, statistics: context.statistics),
+                   "昨日结果可保留本月历史，但不能声称今日为零")
+            expect(current.hasCurrentPeriodData(.day, statistics: context.statistics)
+                && current.hasCurrentPeriodData(.month, statistics: context.statistics),
+                   "当前周期完整读取后的真实零值必须保留")
+            let coordinator = UsageRefreshCoordinator(loaders: emptyLoaders(), foregroundDeadline: 0.04, historyDelay: 0.01)
+            var latest: HomePresentation?
+            coordinator.onChange = { latest = $0 }
+            coordinator.start(context: context)
+            coordinator.acceptHistoryArchive(UsageArchivePresentation(local: october, observedAt: october.lastUpdatedAt!, complete: true, revision: 1))
+            expect(status(latest, .codex, .local)?.phase == .cached,
+                   "跨日的完整归档必须标为上次结果，不能显示已更新")
+            coordinator.acceptHistoryArchive(UsageArchivePresentation(local: current, observedAt: now, complete: true, revision: 2))
+            expect(status(latest, .codex, .local)?.phase == .ready,
+                   "当前周期发布后应恢复已更新状态")
+            coordinator.stop()
+        }
+
         // A bounded page must keep visible live states working even when most
         // source records were not materialized. Only visible moves affect counts.
         do {

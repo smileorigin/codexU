@@ -57,15 +57,18 @@ enum UsageArchiveSelfTest {
                 }
             }
             try project("parent"); try project("child")
-            func archive() throws -> Int64 {
-                let build = try store.beginDayArchive(context: context, root: "fixture", dayKey: statistics.dayKey(for: now), now: now)
+            func finishArchive(_ build: String, complete: Bool = true) throws -> Int64 {
                 var count = 0
                 while try !store.stepDayArchive(build: build, now: now) {
                     count += 1; try check(count < 100)
                 }
-                try check(store.rows("SELECT state FROM report_build WHERE id=?", [.text(build)], limit: 1).first?.first?.text == "ready")
+                try check(store.rows("SELECT state FROM report_build WHERE id=?", [.text(build)], limit: 1).first?.first?.text == (complete ? "ready" : "partial"))
                 let payload = try store.rows("SELECT cursor FROM report_build WHERE id=?", [.text(build)], limit: 1).first?.first?.text
                 return try JSONDecoder().decode(UsageArchiveCursor.self, from: Data(payload!.utf8)).publicationRevision
+            }
+            func archive(complete: Bool = true) throws -> Int64 {
+                try finishArchive(store.beginDayArchive(context: context, root: "fixture",
+                    dayKey: statistics.dayKey(for: now), now: now), complete: complete)
             }
             let oldCut = try archive()
             func total(_ cut: Int64) throws -> Int64 {
@@ -77,6 +80,40 @@ enum UsageArchiveSelfTest {
                 return sum
             }
             try check(total(oldCut) == 175)
+
+            func discover(_ sources: [String], complete: Bool = true) throws {
+                let scan = try store.beginDiscovery(root: "fixture", runtime: "codex", now: now)
+                for source in sources {
+                    try store.execute("UPDATE source SET discovered_epoch=? WHERE id=?", [.integer(scan), .text(source)])
+                }
+                try store.finishDiscovery(scan: scan, complete: complete, now: now)
+            }
+            // 从未成功读取的会话被完整清单移除后，不能永久挡住其他来源发布
+            try store.registerSource(id: "empty-removed", root: "fixture", runtime: "codex",
+                logicalID: "empty-removed", locator: "/missing", now: now)
+            try store.recordMetadata(source: "empty-removed", metadata: UsageSourceMetadata(model: nil, project: "fixture"), now: now)
+            try store.observeSource(source: "empty-removed", identity: "", targetEnd: 0, status: "missing", now: now)
+            try discover(["parent", "child", "empty-removed"])
+            let beforeRemoval = try store.beginDayArchive(context: context, root: "fixture",
+                dayKey: statistics.dayKey(for: now), now: now)
+            _ = try archive(complete: false)
+            try check(store.scalar("SELECT revision_id FROM published_slice WHERE context_id=? AND runtime='codex'", [.text(context)]) == oldCut)
+            try discover(["parent", "child"], complete: false)
+            _ = try archive(complete: false)
+            try discover(["parent", "child"])
+            try check(total(archive()) == 175)
+            _ = try finishArchive(beforeRemoval, complete: false)
+
+            // 同一来源重新出现时，旧清单的移除记录不能掩盖当前文件仍不可读
+            try discover(["parent", "child", "empty-removed"])
+            _ = try archive(complete: false)
+            // 已有有效历史的来源仍需补齐，不能被当作无数据的空条目跳过
+            try discover(["child"])
+            _ = try archive(complete: false)
+            try discover(["parent", "child"])
+            try store.observeSource(source: "parent", identity: "parent", targetEnd: 10, status: "readable", now: now)
+            try check(total(archive()) == 175)
+
             // Removing only the parent metadata must retire the old dependency in the same generation.
             try store.recordMetadata(source: "child", metadata: UsageSourceMetadata(model: nil, project: "fixture", parentLogicalID: nil), now: now)
             revision = try store.scalar("SELECT max(id) FROM revision")!
@@ -93,7 +130,7 @@ enum UsageArchiveSelfTest {
             try project("parent"); try project("child")
             let newCut = try archive()
             try check(total(newCut) == 0 && total(oldCut) == 175)
-            print("history archive: resumable fork prefix, parent watermarks, day projection, fixed-cut archive and empty replacement passed")
+            print("history archive: fork prefix, fixed cuts, empty replacement and retired empty-source coverage passed")
             return true
         } catch {
             print("history archive failed: \(error)")

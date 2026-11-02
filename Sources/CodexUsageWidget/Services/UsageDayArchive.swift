@@ -45,7 +45,7 @@ extension UsageIndexStore {
     func stepDayArchive(build: String, now: Date) throws -> Bool {
         try transaction {
             guard let row = try rows("""
-                SELECT b.context_id,b.cut_revision,b.cursor,b.state,c.root_id,b.runtime FROM report_build b
+                SELECT b.context_id,b.cut_revision,b.cursor,b.state,c.root_id,b.runtime,b.scan_id FROM report_build b
                 JOIN projection_context c ON c.id=b.context_id WHERE b.id=?
                 """, [.text(build)], limit: 1).first,
                   let context = row[0].text, let cut = row[1].integer,
@@ -53,8 +53,22 @@ extension UsageIndexStore {
             if row[3].text == "ready" || row[3].text == "partial" { return true }
             var cursor = try JSONDecoder().decode(UsageArchiveCursor.self, from: Data(serialized.utf8))
             if cursor.stage == "members" {
-                let sources = try rows("SELECT id FROM source WHERE root_id=? AND runtime=? AND created_revision<=? AND id>? ORDER BY id LIMIT 100",
-                    [.text(root), .text(runtime), .integer(cut), .text(cursor.source)], limit: 100)
+                // 完整清单已移除且从未激活过有效世代的条目，没有用量需要补齐
+                // 清单仍包含的缺失文件、已有历史的来源和 cut 之后的变化不能被忽略
+                let sources = try rows("""
+                    SELECT s.id FROM source s
+                    WHERE s.root_id=? AND s.runtime=? AND s.created_revision<=? AND s.id>?
+                      AND NOT EXISTS (
+                        SELECT 1 FROM source_observation o
+                        WHERE o.source_id=s.id AND o.scan_id=? AND o.status='missing' AND o.revision_id<=?
+                          AND NOT EXISTS (
+                            SELECT 1 FROM source_generation g
+                            WHERE g.source_id=s.id AND g.valid_from IS NOT NULL AND g.valid_from<=?
+                          )
+                      )
+                    ORDER BY s.id LIMIT 100
+                    """, [.text(root), .text(runtime), .integer(cut), .text(cursor.source),
+                          row[6], .integer(cut), .integer(cut)], limit: 100)
                 for sourceRow in sources {
                     guard let source = sourceRow[0].text else { throw UsageIndexError.cacheInvalid }
                     cursor.source = source
